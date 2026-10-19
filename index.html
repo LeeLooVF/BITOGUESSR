@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BITOGUESSR</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .leaflet-container {
+      background: #000 !important;
+    }
+    .pixel-box {
+      border: 3px solid #fff;
+      background: #000;
+      border-radius: 2px;
+    }
+    .custom-red-pin {
+      width: 28px;
+      height: 38px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 32' fill='%23ef4444' stroke='%23000' stroke-width='1.5'%3E%3Cpath d='M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20c0-6.63-5.37-12-12-12zm0 16a4 4 0 110-8 4 4 0 010 8z'/%3E%3C/svg%3E");
+      background-size: contain;
+      background-repeat: no-repeat;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden select-none">
+
+  <!-- ACCUEIL -->
+  <div id="screen-home" class="relative flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
+    <!-- Header style application avec bouton Top 10 -->
+    <div class="absolute top-4 left-4 text-left flex items-center gap-3">
+      <div class="w-10 h-10 pixel-box flex items-center justify-center text-xl bg-neutral-900">
+        🍆
+      </div>
+      <div>
+        <p class="font-bold text-sm tracking-wide leading-tight">BITOGUESSR</p>
+        <button onclick="openLeaderboard()" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 font-semibold">
+          🏆 Top 10 des scores
+        </button>
+      </div>
+    </div>
+
+    <h1 class="text-[clamp(2.5rem,10vw,5rem)] font-black uppercase tracking-tight">BITOGUESSR</h1>
+    <p class="mt-4 max-w-md text-base sm:text-lg text-neutral-300">Devine le pays grâce à sa moyenne. Oui, ça parle bien de ça.</p>
+
+    <div class="mt-10">
+      <button onclick="showScreen('screen-display')" class="pixel-box px-10 py-4 text-lg font-bold uppercase transition-colors hover:bg-white hover:text-black">
+        Jouer
+      </button>
+    </div>
+
+    <p class="mt-8 max-w-sm text-xs leading-relaxed text-neutral-500">
+      Compilation Veale et al. / Lynn. 10 manches, 1 point par bonne réponse.
+    </p>
+  </div>
+
+  <!-- SÉLECTION AFFICHAGE -->
+  <div id="screen-display" class="hidden flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
+    <h1 class="text-[clamp(2rem,8vw,4rem)] font-black uppercase tracking-tight">BITOGUESSR</h1>
+    <p class="mt-8 text-sm uppercase tracking-wide text-neutral-400">Choisis ton affichage</p>
+
+    <div class="mt-4 flex flex-col gap-4 sm:flex-row">
+      <button onclick="startGame('cm')" class="pixel-box px-8 py-4 text-base font-bold uppercase transition-colors hover:bg-white hover:text-black">
+        Centimètres
+      </button>
+      <button onclick="startGame('obj')" class="pixel-box px-8 py-4 text-base font-bold uppercase transition-colors hover:bg-white hover:text-black">
+        Objets
+      </button>
+    </div>
+
+    <button onclick="showScreen('screen-home')" class="mt-6 text-xs uppercase text-neutral-500 underline-offset-4 hover:underline">
+      ← Retour
+    </button>
+  </div>
+
+  <!-- JEU -->
+  <div id="screen-game" class="hidden relative h-screen w-screen overflow-hidden">
+    <div id="map" class="absolute inset-0 z-0 h-full w-full"></div>
+
+    <!-- HUD Supérieur -->
+    <div class="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex flex-col items-center gap-2 p-3 sm:p-4">
+      <div class="flex w-full justify-between items-center max-w-xl">
+        <div class="flex items-center gap-2">
+          <span id="hud-round" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Manche 1/10</span>
+          <span id="hud-score" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Score 0/10</span>
+        </div>
+        <button onclick="openLeaderboard()" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase hover:bg-white hover:text-black flex items-center gap-1">
+          🏆 Top 10
+        </button>
+      </div>
+
+      <div class="pointer-events-auto pixel-box px-6 py-2 text-center text-white">
+        <p class="text-[11px] uppercase tracking-wide text-neutral-300">Trouve un pays avec une moyenne de</p>
+        <p id="target-value" class="text-4xl font-black uppercase sm:text-5xl">--</p>
+      </div>
+    </div>
+
+    <!-- HUD Inférieur (Sélection & Validation) -->
+    <div id="hud-bottom-select" class="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex justify-center p-3 sm:p-4">
+      <div class="pointer-events-auto w-full max-w-md pixel-box p-4 text-center">
+        <p id="selected-country-text" class="mb-3 truncate text-sm text-neutral-400">
+          Clique sur la carte pour placer ton marqueur
+        </p>
+        <button id="btn-validate" onclick="submitGuess()" disabled
+          class="w-full border-[3px] border-neutral-600 bg-black py-3 text-base font-bold uppercase text-neutral-600 cursor-not-allowed">
+          VALIDER
+        </button>
+      </div>
+    </div>
+
+    <!-- HUD Inférieur (Correction) -->
+    <div id="hud-bottom-result" class="hidden pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex justify-center p-3 sm:p-4">
+      <div class="pointer-events-auto w-full max-w-md pixel-box p-5 text-center">
+        <h2 id="result-status" class="text-xl sm:text-2xl font-black uppercase tracking-wider">
+          ✕ MAUVAISE RÉPONSE !
+        </h2>
+        <p id="result-subtext" class="mt-1 text-xs text-neutral-400"></p>
+        <button onclick="nextRound()" class="mt-4 w-full pixel-box py-3 text-sm sm:text-base font-black uppercase tracking-wider transition-colors hover:bg-white hover:text-black">
+          MANCHE SUIVANTE →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FIN DE PARTIE & ENREGISTREMENT -->
+  <div id="modal-gameover" class="hidden fixed inset-0 z-[2000] flex items-center justify-center bg-black/85 px-4">
+    <div class="w-full max-w-sm pixel-box p-6 text-center">
+      <h2 class="text-2xl font-black uppercase tracking-wider">Partie terminée !</h2>
+      <p id="final-score-text" class="mt-2 text-base font-bold text-neutral-300">Ton score : 0/10</p>
+      
+      <div class="mt-6 text-left">
+        <label for="player-name" class="block text-xs uppercase tracking-wide text-neutral-400 mb-1">Entre ton pseudo</label>
+        <input type="text" id="player-name" maxlength="15" placeholder="Pseudo" 
+          class="w-full pixel-box px-3 py-2 text-sm bg-neutral-900 text-white outline-none focus:border-indigo-400">
+      </div>
+
+      <button id="btn-save-score" onclick="saveScore()" class="mt-4 w-full pixel-box py-3 text-sm font-bold uppercase hover:bg-white hover:text-black">
+        Enregistrer mon score
+      </button>
+      <button onclick="showScreen('screen-home'); document.getElementById('modal-gameover').classList.add('hidden');" class="mt-2 text-xs uppercase text-neutral-500 hover:underline">
+        Passer sans enregistrer
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DU TOP 10 -->
+  <div id="modal-leaderboard" class="hidden fixed inset-0 z-[3000] flex items-center justify-center bg-black/85 px-4">
+    <div class="w-full max-w-md pixel-box p-6 text-center">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-black uppercase tracking-wider flex items-center gap-2">
+          🏆 Top 10 des scores
+        </h2>
+        <button onclick="closeLeaderboard()" class="text-neutral-400 hover:text-white font-bold text-lg leading-none">✕</button>
+      </div>
+
+      <div class="border border-neutral-800 divide-y divide-neutral-800 text-left max-h-64 overflow-y-auto" id="leaderboard-list">
+        <!-- Rempli en JS -->
+      </div>
+
+      <button onclick="closeLeaderboard()" class="mt-6 w-full pixel-box py-3 text-xs font-bold uppercase hover:bg-white hover:text-black">
+        Fermer
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://api-bitoguessr.kjh27r4i-70a.workers.dev";
+
+    const DATA = {
+      "Algeria": 14.2,
+      "France": 15.7,
+      "Ecuador": 17.6,
+      "Democratic Republic of the Congo": 18.0,
+      "Republic of the Congo": 18.0,
+      "Ghana": 17.3,
+      "Colombia": 17.0,
+      "Nigeria": 17.0,
+      "Cameroon": 16.7,
+      "Brazil": 15.7,
+      "Italy": 15.3,
+      "Sweden": 15.1,
+      "Germany": 14.5,
+      "Norway": 14.3,
+      "Australia": 14.5,
+      "Spain": 13.9,
+      "Canada": 13.9,
+      "India": 13.7,
+      "United States of America": 13.6,
+      "Japan": 13.5,
+      "South Korea": 13.2,
+      "China": 13.1,
+      "United Kingdom": 13.1,
+      "Greece": 12.2,
+      "Thailand": 11.5,
+      "Cambodia": 10.0,
+      "Egypt": 15.7,
+      "Morocco": 15.0,
+      "Tunisia": 14.4,
+      "Saudi Arabia": 12.4,
+      "Iraq": 11.5,
+      "Iran": 14.5,
+      "Turkey": 13.0,
+      "Ukraine": 14.0,
+      "Poland": 14.3,
+      "Portugal": 13.2,
+      "Russia": 13.2,
+      "Argentina": 14.9,
+      "Mexico": 14.9,
+      "Peru": 15.0,
+      "Sudan": 16.5,
+      "Chad": 15.4
+    };
+
+    function getObjectComparison(cm) {
+      if (cm >= 17.5) return "Un grand concombre";
+      if (cm >= 16.5) return "Une bouteille de bière 33cl";
+      if (cm >= 15.0) return "Un stylo bille standard";
+      if (cm >= 14.0) return "Un iPhone standard";
+      if (cm >= 13.0) return "Une canette de soda 33cl";
+      if (cm >= 11.5) return "Un passeport";
+      return "Une carte bancaire en diagonale";
+    }
+
+    let gameConfig = { display: "cm" };
+    let currentRound = 0;
+    let score = 0;
+    let targetCm = null;
+    let targetCountryName = null;
+    let selectedCountryName = null;
+    let isCorrectionState = false;
+
+    let map, marker, geoJsonLayer;
+
+    function showScreen(id) {
+      ["screen-home", "screen-display", "screen-game"].forEach(s => {
+        document.getElementById(s).classList.add("hidden");
+      });
+      document.getElementById(id).classList.remove("hidden");
+      if (id === "screen-game" && map) {
+        setTimeout(() => map.invalidateSize(), 200);
+      }
+    }
+
+    function startGame(display) {
+      gameConfig.display = display;
+      currentRound = 0;
+      score = 0;
+      showScreen("screen-game");
+      initMap();
+      loadNextQuestion();
+    }
+
+    function initMap() {
+      if (map) return;
+      map = L.map("map", {
+        zoomControl: false,
+        minZoom: 2,
+        maxBounds: [[-85, -180], [85, 180]]
+      }).setView([25, 15], 2);
+
+      L.control.zoom({ position: "topright" }).addTo(map);
+
+      // Tuiles Esri Canvas Dark (gratuites et sans clé)
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+        maxZoom: 16
+      }).addTo(map);
+
+      fetch("https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson")
+        .then(res => res.json())
+        .then(data => {
+          geoJsonLayer = L.geoJSON(data, {
+            style: defaultCountryStyle,
+            onEachFeature: (feature, layer) => {
+              layer.on({
+                mouseover: (e) => {
+                  if (isCorrectionState) return;
+                  e.target.setStyle({ fillOpacity: 0.5, color: "#94a3b8" });
+                },
+                mouseout: (e) => {
+                  if (isCorrectionState) return;
+                  geoJsonLayer.resetStyle(e.target);
+                },
+                click: (e) => onCountryClick(feature.properties.ADMIN || feature.properties.name, e.latlng)
+              });
+            }
+          }).addTo(map);
+        });
+    }
+
+    function defaultCountryStyle() {
+      return {
+        color: "#283447",
+        weight: 0.6,
+        fillColor: "#172033",
+        fillOpacity: 0.35
+      };
+    }
+
+    function onCountryClick(name, latlng) {
+      if (isCorrectionState) return;
+
+      selectedCountryName = name;
+
+      const redIcon = L.divIcon({
+        className: "custom-red-pin",
+        iconSize: [28, 38],
+        iconAnchor: [14, 38]
+      });
+
+      if (!marker) {
+        marker = L.marker(latlng, { icon: redIcon }).addTo(map);
+      } else {
+        marker.setLatLng(latlng);
+      }
+
+      document.getElementById("selected-country-text").innerHTML =
+        `Sélectionné : <strong class="text-white">${selectedCountryName}</strong>`;
+
+      const btn = document.getElementById("btn-validate");
+      btn.disabled = false;
+      btn.className = "w-full pixel-box bg-white text-black py-3 text-base font-bold uppercase transition-colors hover:bg-black hover:text-white cursor-pointer";
+    }
+
+    function loadNextQuestion() {
+      isCorrectionState = false;
+      currentRound++;
+      selectedCountryName = null;
+
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
+      }
+      if (geoJsonLayer) {
+        geoJsonLayer.setStyle(defaultCountryStyle);
+      }
+
+      document.getElementById("hud-bottom-select").classList.remove("hidden");
+      document.getElementById("hud-bottom-result").classList.add("hidden");
+
+      document.getElementById("hud-round").innerText = `Manche ${currentRound}/10`;
+      document.getElementById("hud-score").innerText = `Score ${score}/10`;
+      document.getElementById("selected-country-text").innerText = "Clique sur la carte pour placer ton marqueur";
+
+      const btn = document.getElementById("btn-validate");
+      btn.disabled = true;
+      btn.className = "w-full border-[3px] border-neutral-600 bg-black py-3 text-base font-bold uppercase text-neutral-600 cursor-not-allowed";
+
+      const countryKeys = Object.keys(DATA);
+      targetCountryName = countryKeys[Math.floor(Math.random() * countryKeys.length)];
+      targetCm = DATA[targetCountryName];
+
+      const valContainer = document.getElementById("target-value");
+      if (gameConfig.display === "cm") {
+        valContainer.innerHTML = `${Math.round(targetCm)} <span class="text-2xl sm:text-3xl">CM</span>`;
+      } else {
+        valContainer.innerHTML = `<span class="text-xl sm:text-2xl font-bold">${getObjectComparison(targetCm)}</span>`;
+      }
+    }
+
+    function submitGuess() {
+      if (!selectedCountryName || isCorrectionState) return;
+      isCorrectionState = true;
+
+      const playerCm = DATA[selectedCountryName] || 13.5;
+      const isCorrect = Math.round(playerCm) === Math.round(targetCm);
+
+      if (isCorrect) score++;
+
+      geoJsonLayer.eachLayer(layer => {
+        const cName = layer.feature.properties.ADMIN || layer.feature.properties.name;
+        const val = DATA[cName];
+        const isMatch = val && Math.round(val) === Math.round(targetCm);
+
+        if (cName === selectedCountryName) {
+          layer.setStyle({
+            fillColor: isCorrect ? "#10b981" : "#dc2626",
+            fillOpacity: 0.65,
+            color: isCorrect ? "#34d399" : "#ef4444",
+            weight: 2
+          });
+          layer.bringToFront();
+        } else if (isMatch) {
+          layer.setStyle({
+            fillColor: "#059669",
+            fillOpacity: 0.6,
+            color: "#10b981",
+            weight: 1.5
+          });
+        } else {
+          layer.setStyle({
+            fillColor: "#0f172a",
+            fillOpacity: 0.2,
+            color: "#1e293b",
+            weight: 0.4
+          });
+        }
+      });
+
+      document.getElementById("hud-bottom-select").classList.add("hidden");
+      const resultBox = document.getElementById("hud-bottom-result");
+      const title = document.getElementById("result-status");
+      const sub = document.getElementById("result-subtext");
+
+      if (isCorrect) {
+        title.innerHTML = "✓ BONNE RÉPONSE !";
+        title.className = "text-xl sm:text-2xl font-black uppercase tracking-wider text-emerald-400";
+        sub.innerText = `${selectedCountryName} : ${playerCm} cm.`;
+      } else {
+        title.innerHTML = "✕ MAUVAISE RÉPONSE !";
+        title.className = "text-xl sm:text-2xl font-black uppercase tracking-wider text-rose-500";
+        sub.innerText = `${selectedCountryName} fait ${playerCm} cm (moyenne demandée : ${Math.round(targetCm)} cm).`;
+      }
+
+      resultBox.classList.remove("hidden");
+    }
+
+    function nextRound() {
+      if (currentRound >= 10) {
+        document.getElementById("final-score-text").innerText = `Ton score : ${score}/10`;
+        document.getElementById("player-name").value = "";
+        document.getElementById("modal-gameover").classList.remove("hidden");
+      } else {
+        loadNextQuestion();
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    async function saveScore() {
+      const input = document.getElementById("player-name");
+      const name = input.value.trim() || "Anonyme";
+      const saveBtn = document.getElementById("btn-save-score");
+
+      saveBtn.disabled = true;
+      saveBtn.innerText = "Enregistrement...";
+
+      try {
+        await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name, score: score })
+        });
+      } catch (err) {
+        console.error("Erreur enregistrement :", err);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = "Enregistrer mon score";
+        document.getElementById("modal-gameover").classList.add("hidden");
+        openLeaderboard();
+      }
+    }
+
+    async function openLeaderboard() {
+      const listEl = document.getElementById("leaderboard-list");
+      listEl.innerHTML = `<div class="p-4 text-center text-xs text-neutral-500">Chargement du Top 10...</div>`;
+      document.getElementById("modal-leaderboard").classList.remove("hidden");
+
+      try {
+        const res = await fetch(API_URL);
+        const scores = await res.json();
+        listEl.innerHTML = "";
+
+        if (!scores || scores.length === 0) {
+          listEl.innerHTML = `<div class="p-4 text-center text-xs text-neutral-500">Aucun score enregistré pour l'instant.</div>`;
+          return;
+        }
+
+        scores.forEach((item, index) => {
+          const row = document.createElement("div");
+          row.className = "p-3 flex justify-between items-center text-xs";
+          row.innerHTML = `
+            <div class="flex items-center gap-3">
+              <span class="font-black text-sm text-neutral-500 w-4">${index + 1}.</span>
+              <span class="font-bold text-white">${escapeHtml(item.name)}</span>
+            </div>
+            <div class="flex items-center gap-4">
+              <span class="text-neutral-500 text-[10px]">${item.date || ""}</span>
+              <span class="font-black text-indigo-400 text-sm">${item.score}/10</span>
+            </div>
+          `;
+          listEl.appendChild(row);
+        });
+      } catch (e) {
+        listEl.innerHTML = `<div class="p-4 text-center text-xs text-red-400">Erreur de chargement des scores.</div>`;
+      }
+    }
+
+    function closeLeaderboard() {
+      document.getElementById("modal-leaderboard").classList.add("hidden");
+      if (currentRound >= 10) {
+        showScreen("screen-home");
+      }
+    }
+  </script>
+</body>
+</html>
