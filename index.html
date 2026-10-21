@@ -38,7 +38,6 @@
 
   <!-- ACCUEIL -->
   <div id="screen-home" class="relative flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
-    <!-- Header style application avec bouton Top 10 -->
     <div class="absolute top-4 left-4 text-left flex items-center gap-3">
       <div class="w-10 h-10 pixel-box flex items-center justify-center text-xl bg-neutral-900">
         🍆
@@ -61,7 +60,7 @@
     </div>
 
     <p class="mt-8 max-w-sm text-xs leading-relaxed text-neutral-500">
-      Compilation Veale et al. / Lynn. 10 manches, 1 point par bonne réponse.
+      Compilation Veale et al. / Lynn. 9 manches (de 10 à 18 cm), 1 point par bonne réponse.
     </p>
   </div>
 
@@ -92,8 +91,8 @@
     <div class="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex flex-col items-center gap-2 p-3 sm:p-4">
       <div class="flex w-full justify-between items-center max-w-xl">
         <div class="flex items-center gap-2">
-          <span id="hud-round" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Manche 1/10</span>
-          <span id="hud-score" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Score 0/10</span>
+          <span id="hud-round" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Manche 1/9</span>
+          <span id="hud-score" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase">Score 0/9</span>
         </div>
         <button onclick="openLeaderboard()" class="pixel-box pointer-events-auto px-3 py-1 text-xs font-bold uppercase hover:bg-white hover:text-black flex items-center gap-1">
           🏆 Top 10
@@ -137,7 +136,7 @@
   <div id="modal-gameover" class="hidden fixed inset-0 z-[2000] flex items-center justify-center bg-black/85 px-4">
     <div class="w-full max-w-sm pixel-box p-6 text-center">
       <h2 class="text-2xl font-black uppercase tracking-wider">Partie terminée !</h2>
-      <p id="final-score-text" class="mt-2 text-base font-bold text-neutral-300">Ton score : 0/10</p>
+      <p id="final-score-text" class="mt-2 text-base font-bold text-neutral-300">Ton score : 0/9</p>
       
       <div class="mt-6 text-left">
         <label for="player-name" class="block text-xs uppercase tracking-wide text-neutral-400 mb-1">Entre ton pseudo</label>
@@ -165,7 +164,6 @@
       </div>
 
       <div class="border border-neutral-800 divide-y divide-neutral-800 text-left max-h-64 overflow-y-auto" id="leaderboard-list">
-        <!-- Rempli en JS -->
       </div>
 
       <button onclick="closeLeaderboard()" class="mt-6 w-full pixel-box py-3 text-xs font-bold uppercase hover:bg-white hover:text-black">
@@ -176,6 +174,7 @@
 
   <script>
     const API_URL = "https://api-bitoguessr.kjh27r4i-70a.workers.dev";
+    const TOTAL_ROUNDS = 9;
 
     const DATA = {
       "Algeria": 14.2,
@@ -202,14 +201,14 @@
       "China": 13.1,
       "United Kingdom": 13.1,
       "Greece": 12.2,
-      "Thailand": 11.5,
-      "Cambodia": 10.0,
+      "Thailand": 11.45,
+      "Cambodia": 10.04,
       "Egypt": 15.7,
       "Morocco": 15.0,
       "Tunisia": 14.4,
       "Saudi Arabia": 12.4,
       "Iraq": 11.5,
-      "Iran": 14.5,
+      "Iran": 11.95,
       "Turkey": 13.0,
       "Ukraine": 14.0,
       "Poland": 14.3,
@@ -219,26 +218,39 @@
       "Mexico": 14.9,
       "Peru": 15.0,
       "Sudan": 16.5,
-      "Chad": 15.4
+      "Chad": 15.4,
+      "Indonesia": 11.67,
+      "Singapore": 11.53,
+      "Malaysia": 11.49,
+      "Vietnam": 11.47,
+      "Bangladesh": 11.20,
+      "Sri Lanka": 10.89,
+      "Philippines": 10.85,
+      "Myanmar": 10.70
     };
 
-    function getObjectComparison(cm) {
-      if (cm >= 17.5) return "Un grand concombre";
-      if (cm >= 16.5) return "Une bouteille de bière 33cl";
-      if (cm >= 15.0) return "Un stylo bille standard";
-      if (cm >= 14.0) return "Un iPhone standard";
-      if (cm >= 13.0) return "Une canette de soda 33cl";
-      if (cm >= 11.5) return "Un passeport";
-      return "Une carte bancaire en diagonale";
+    function getObjectComparisonByCm(cmFloor) {
+      const objMap = {
+        18: "Une grande règle de 20cm",
+        17: "Un grand concombre",
+        16: "Une bouteille de bière 33cl",
+        15: "Un stylo bille standard",
+        14: "Un iPhone standard",
+        13: "Une canette de soda 33cl",
+        12: "Un passeport",
+        11: "Un paquet de mouchoirs",
+        10: "Une carte bancaire en diagonale"
+      };
+      return objMap[cmFloor] || "Un objet mystère";
     }
 
     let gameConfig = { display: "cm" };
     let currentRound = 0;
     let score = 0;
-    let targetCm = null;
-    let targetCountryName = null;
+    let targetCmTier = null;
     let selectedCountryName = null;
     let isCorrectionState = false;
+    let gameRounds = [];
 
     let map, marker, geoJsonLayer;
 
@@ -256,6 +268,8 @@
       gameConfig.display = display;
       currentRound = 0;
       score = 0;
+      // On génère les 9 paliers (10 à 18) mélangés aléatoirement
+      gameRounds = [10, 11, 12, 13, 14, 15, 16, 17, 18].sort(() => Math.random() - 0.5);
       showScreen("screen-game");
       initMap();
       loadNextQuestion();
@@ -271,7 +285,6 @@
 
       L.control.zoom({ position: "topright" }).addTo(map);
 
-      // Tuiles Esri Canvas Dark (gratuites et sans clé)
       L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
         attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
         maxZoom: 16
@@ -349,23 +362,22 @@
       document.getElementById("hud-bottom-select").classList.remove("hidden");
       document.getElementById("hud-bottom-result").classList.add("hidden");
 
-      document.getElementById("hud-round").innerText = `Manche ${currentRound}/10`;
-      document.getElementById("hud-score").innerText = `Score ${score}/10`;
+      document.getElementById("hud-round").innerText = `Manche ${currentRound}/${TOTAL_ROUNDS}`;
+      document.getElementById("hud-score").innerText = `Score ${score}/${TOTAL_ROUNDS}`;
       document.getElementById("selected-country-text").innerText = "Clique sur la carte pour placer ton marqueur";
 
       const btn = document.getElementById("btn-validate");
       btn.disabled = true;
       btn.className = "w-full border-[3px] border-neutral-600 bg-black py-3 text-base font-bold uppercase text-neutral-600 cursor-not-allowed";
 
-      const countryKeys = Object.keys(DATA);
-      targetCountryName = countryKeys[Math.floor(Math.random() * countryKeys.length)];
-      targetCm = DATA[targetCountryName];
+      // On pioche le palier de la manche courante
+      targetCmTier = gameRounds[currentRound - 1];
 
       const valContainer = document.getElementById("target-value");
       if (gameConfig.display === "cm") {
-        valContainer.innerHTML = `${Math.round(targetCm)} <span class="text-2xl sm:text-3xl">CM</span>`;
+        valContainer.innerHTML = `${targetCmTier} <span class="text-2xl sm:text-3xl">CM</span>`;
       } else {
-        valContainer.innerHTML = `<span class="text-xl sm:text-2xl font-bold">${getObjectComparison(targetCm)}</span>`;
+        valContainer.innerHTML = `<span class="text-xl sm:text-2xl font-bold">${getObjectComparisonByCm(targetCmTier)}</span>`;
       }
     }
 
@@ -373,15 +385,16 @@
       if (!selectedCountryName || isCorrectionState) return;
       isCorrectionState = true;
 
-      const playerCm = DATA[selectedCountryName] || 13.5;
-      const isCorrect = Math.round(playerCm) === Math.round(targetCm);
+      const playerCm = DATA[selectedCountryName];
+      const playerTier = playerCm !== undefined ? Math.floor(playerCm) : -1;
+      const isCorrect = playerTier === targetCmTier;
 
       if (isCorrect) score++;
 
       geoJsonLayer.eachLayer(layer => {
         const cName = layer.feature.properties.ADMIN || layer.feature.properties.name;
         const val = DATA[cName];
-        const isMatch = val && Math.round(val) === Math.round(targetCm);
+        const isMatch = val !== undefined && Math.floor(val) === targetCmTier;
 
         if (cName === selectedCountryName) {
           layer.setStyle({
@@ -413,6 +426,8 @@
       const title = document.getElementById("result-status");
       const sub = document.getElementById("result-subtext");
 
+      const targetLabel = gameConfig.display === "cm" ? `${targetCmTier} cm` : getObjectComparisonByCm(targetCmTier);
+
       if (isCorrect) {
         title.innerHTML = "✓ BONNE RÉPONSE !";
         title.className = "text-xl sm:text-2xl font-black uppercase tracking-wider text-emerald-400";
@@ -420,15 +435,19 @@
       } else {
         title.innerHTML = "✕ MAUVAISE RÉPONSE !";
         title.className = "text-xl sm:text-2xl font-black uppercase tracking-wider text-rose-500";
-        sub.innerText = `${selectedCountryName} fait ${playerCm} cm (moyenne demandée : ${Math.round(targetCm)} cm).`;
+        if (playerCm !== undefined) {
+          sub.innerText = `${selectedCountryName} fait ${playerCm} cm (palier demandé : ${targetLabel}).`;
+        } else {
+          sub.innerText = `${selectedCountryName} n'a pas de donnée disponible (palier demandé : ${targetLabel}).`;
+        }
       }
 
       resultBox.classList.remove("hidden");
     }
 
     function nextRound() {
-      if (currentRound >= 10) {
-        document.getElementById("final-score-text").innerText = `Ton score : ${score}/10`;
+      if (currentRound >= TOTAL_ROUNDS) {
+        document.getElementById("final-score-text").innerText = `Ton score : ${score}/${TOTAL_ROUNDS}`;
         document.getElementById("player-name").value = "";
         document.getElementById("modal-gameover").classList.remove("hidden");
       } else {
@@ -489,7 +508,7 @@
             </div>
             <div class="flex items-center gap-4">
               <span class="text-neutral-500 text-[10px]">${item.date || ""}</span>
-              <span class="font-black text-indigo-400 text-sm">${item.score}/10</span>
+              <span class="font-black text-indigo-400 text-sm">${item.score}/${TOTAL_ROUNDS}</span>
             </div>
           `;
           listEl.appendChild(row);
@@ -501,7 +520,7 @@
 
     function closeLeaderboard() {
       document.getElementById("modal-leaderboard").classList.add("hidden");
-      if (currentRound >= 10) {
+      if (currentRound >= TOTAL_ROUNDS) {
         showScreen("screen-home");
       }
     }
